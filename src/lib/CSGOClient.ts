@@ -31,9 +31,6 @@ export default class CSGOClient extends EventEmitter {
 
       this.socket.once('error', reject);
       this.socket.on('data', this.onDataReceived.bind(this));
-      this.socket.on('close', () => {
-        this.socket = null;
-      });
     });
   }
 
@@ -42,7 +39,7 @@ export default class CSGOClient extends EventEmitter {
   }
 
   onError(e: Error) {
-    this.emit(error, e);
+    this.emit('error', e);
   }
 
   disconnect() {
@@ -72,18 +69,34 @@ export default class CSGOClient extends EventEmitter {
   onDataReceived(data: string) {
     const utf8Data = data.toString('utf8');
     const indexes = Object.keys(this.waitingForResponses);
+    let matches;
+    let returnVal = utf8Data;
 
     for (let i = 0; i < indexes.length; i += 1) {
-      const { response, resolve } = this.waitingForResponses[indexes[i]];
+      const {
+        response,
+        resolve,
+      }: {
+        response: RegExp | string;
+      } = this.waitingForResponses[indexes[i]];
 
-      if (utf8Data.indexOf(response) > -1) {
-        delete this.waitingForResponses[indexes[i]];
-        resolve(utf8Data);
+      if (response instanceof RegExp) {
+        matches = [...utf8Data.matchAll(response)];
+        // doesn't match regex
+        if (!matches.length) {
+          return;
+        }
+        returnVal = [utf8Data, matches];
+      } else if (utf8Data.indexOf(response) === -1) {
+        return;
       }
+
+      delete this.waitingForResponses[indexes[i]];
+      resolve(returnVal);
     }
   }
 
-  send(command, responsePattern) {
+  send(command: string, responsePattern: RegExp | string) {
     if (!this.socket || !this.isConnected()) {
       throw new Error('Not connected yet.');
     }
@@ -95,12 +108,10 @@ export default class CSGOClient extends EventEmitter {
   async getDemoTickInfo() {
     const regex = /Currently playing ([0-9]+) of ([0-9]+) ticks. Minutes:([0-9]+\.[0-9]+) File:([A-Za-z0-9-_.]+)/gm;
 
-    let response;
     let matches = [];
 
     try {
-      response = await this.send('demo_goto', 'Currently playing ');
-      matches = [...response.matchAll(regex)];
+      [, matches] = await this.send('demo_goto', regex);
     } catch (e) {
       if (e.message.indexOf('Timed out') === -1) {
         throw e;
@@ -110,23 +121,22 @@ export default class CSGOClient extends EventEmitter {
     const demoStatus: DemoStatus = {};
     if (matches.length === 0) {
       demoStatus.currentlyPlaying = false;
-      return demoStatus;
+    } else {
+      const [
+        ,
+        currentTick,
+        totalTicks,
+        totalPlaytimeMinutes,
+        fileName,
+      ] = matches[0];
+
+      demoStatus.currentlyPlaying = true;
+      demoStatus.currentTick = parseInt(currentTick, 10);
+      demoStatus.totalTicks = parseInt(totalTicks, 10);
+      demoStatus.totalPlaytimeMinutes = parseFloat(totalPlaytimeMinutes);
+      demoStatus.fileName = fileName;
     }
 
-    const [
-      ,
-      currentTick,
-      totalTicks,
-      totalPlaytimeMinutes,
-      fileName,
-    ] = matches[0];
-
-    return {
-      currentlyPlaying: true,
-      currentTick: parseInt(currentTick, 10),
-      totalTicks: parseInt(totalTicks, 10),
-      totalPlaytimeMinutes: parseFloat(totalPlaytimeMinutes),
-      fileName,
-    };
+    return demoStatus;
   }
 }

@@ -35,7 +35,7 @@ export default class Windows {
     };
 
     const window = new BrowserWindow(opts);
-    window.loadURL(`file://${__dirname}/${type}`);
+    window.loadURL(`file://${__dirname}/../${type}`);
 
     window.webContents.on('did-finish-load', () => {
       if (process.env.START_MINIMIZED) {

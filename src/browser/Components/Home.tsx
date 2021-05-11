@@ -2,11 +2,13 @@ import React, { useEffect } from 'react';
 import { Button, makeStyles } from '@material-ui/core';
 import { Link } from 'react-router-dom';
 import { ipcRenderer } from 'electron';
-import SyncConnectionContext, { SyncConnection } from './Contexts';
-import { ConfigurationKey, IpcToMain } from '../Enums';
+import SyncConnectionContext, { SyncConnection } from '../Contexts';
+import { ConfigurationKey, IpcToMain, Urls } from '../../lib/Enums';
+import Title from './Title';
 
 const useStyles = makeStyles({
-  wrapper: {
+  root: {
+    paddingTop: 8,
     textAlign: 'center',
   },
   button: {
@@ -38,12 +40,12 @@ export default function Home() {
     ipcRenderer.send(IpcToMain.LaunchLocalSyncServer);
     ipcRenderer.send(
       IpcToMain.ChangeConfiguration,
-      ConfigurationKey.SYNC_SERVER_IP,
+      ConfigurationKey.SyncServerIP,
       '127.0.0.1'
     );
     ipcRenderer.send(
       IpcToMain.ChangeConfiguration,
-      ConfigurationKey.SYNC_SERVER_PORT,
+      ConfigurationKey.SyncServerPort,
       3113
     );
   };
@@ -55,13 +57,18 @@ export default function Home() {
 
         return (
           <div className={classes.root}>
+            <Title
+              title="CS:GO Demo Sync"
+              subTitle="Get started by either creating a new room or joining an existing room."
+            />
+
             <div>
               <Button
                 className={classes.button}
                 color="primary"
                 variant="contained"
                 component={Link}
-                to="/start"
+                to={Urls.CreateRoom}
                 disabled={!syncConnectionStatus.connected}
               >
                 Start a New Session
@@ -73,7 +80,7 @@ export default function Home() {
                 color="primary"
                 variant="contained"
                 component={Link}
-                to="/join"
+                to={Urls.JoinRoom}
                 disabled={!syncConnectionStatus.connected}
               >
                 Join a Session

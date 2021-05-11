@@ -13,16 +13,17 @@ import 'regenerator-runtime/runtime';
 import { app, ipcMain } from 'electron';
 import { IncomingMessage } from 'http';
 import Store from 'electron-store';
-import LocalSyncServer from './SyncServer/SyncServer';
-import Windows from './Windows';
+import LocalSyncServer from './lib/SyncServer';
+import Windows from './lib/Windows';
 import {
   ConfigurationKey,
   IpcToMain,
   IpcToRenderer,
+  WebsocketMessageType,
   WindowTypes,
-} from './Enums';
-import CSGOClient from './CSGOClient';
-import SyncClient, { SyncMessage } from './SyncClient';
+} from './lib/Enums';
+import CSGOClient from './lib/CSGOClient';
+import SyncClient, { SyncMessage } from './lib/SyncClient';
 
 /**
  * Env setup.
@@ -41,13 +42,13 @@ if (isDebug) {
 }
 
 const DEFAULT_CONFIG: Record<ConfigurationKey, unknown> = {
-  [ConfigurationKey.LOCAL_CSGO_TELNET_PORT]: 2121,
-  [ConfigurationKey.SYNC_SERVER_IP]: 'csgo-demo-sync.com',
-  [ConfigurationKey.SYNC_SERVER_PORT]: 3113,
+  [ConfigurationKey.LocalCSGOTelnetPort]: 2121,
+  [ConfigurationKey.SyncServerIP]: 'csgo-demo-sync.com',
+  [ConfigurationKey.SyncServerPort]: 3113,
 };
 
 /**
- * Create some new instances.
+ * Create some new instances and flags.
  */
 const settings = new Store({
   defaults: DEFAULT_CONFIG,
@@ -57,6 +58,8 @@ const windows: Windows = new Windows();
 const localSyncServer: LocalSyncServer = new LocalSyncServer();
 const syncClient: SyncClient = new SyncClient();
 const csgoClient: CSGOClient = new CSGOClient();
+
+let shouldTellSyncServerOnCsgoUpdate = false;
 
 /**
  * Handle creating the main window.
@@ -83,26 +86,28 @@ const sendToLocalSyncServerManagerWindow = (
  * Handle Local Websocket events to pass to renderer as server log events
  */
 const createLocalSyncServerListeners = () => {
-  localSyncServer.on('listening', (port: number) => {
+  localSyncServer.on('listening', (port: number) =>
     sendToLocalSyncServerManagerWindow(
       IpcToRenderer.StartedLocalSyncServer,
       port
-    );
-  });
-  localSyncServer.on('error', (error: Error) => {
+    )
+  );
+  localSyncServer.on('closed', () =>
+    sendToLocalSyncServerManagerWindow(IpcToRenderer.StoppedLocalSyncServer)
+  );
+  localSyncServer.on('error', (error: Error) =>
     sendToLocalSyncServerManagerWindow(
       IpcToRenderer.ErrorStartingLocalSyncServer,
       error
-    );
-  });
+    )
+  );
   localSyncServer.on(
     'connected',
-    (connectionId: string, req: IncomingMessage) => {
-      return sendToLocalSyncServerManagerWindow(
+    (connectionId: string, req: IncomingMessage) =>
+      sendToLocalSyncServerManagerWindow(
         undefined,
         `[${connectionId}] New connection from ${req.socket.remoteAddress}`
-      );
-    }
+      )
   );
   localSyncServer.on('disconnected', (connectionId: string) =>
     sendToLocalSyncServerManagerWindow(
@@ -131,35 +136,56 @@ const createLocalSyncServerListeners = () => {
 /**
  * Handle messages coming in from the renderer.
  */
-const createIpcListeners = () => {
-  ipcMain.on(IpcToMain.LaunchLocalSyncServer, async (event) => {
-    windows.createWindow(WindowTypes.LocalSyncServer, {
-      width: 550,
-      height: 350,
-    });
-    event.sender.send(IpcToRenderer.LaunchedLocalSyncServer);
+const launchLocalServerManager = (event) => {
+  windows.createWindow(WindowTypes.LocalSyncServer, {
+    width: 550,
+    height: 350,
   });
+  event.sender.send(IpcToRenderer.LaunchedLocalSyncServer);
+};
 
-  ipcMain.on(IpcToMain.StartLocalSyncServer, async (event, port: number) => {
-    localSyncServer.startServer(port);
-  });
+const changeConfiguration = (event, key: ConfigurationKey, value: unknown) => {
+  console.log(`Changing configuration: ${key} => ${value}`);
+  settings.set(key, value);
+};
 
-  ipcMain.on(IpcToMain.StopLocalSyncServer, async (event) => {
-    localSyncServer.stopServer();
-    event.sender.send(IpcToRenderer.StoppedLocalSyncServer);
-  });
+const sendToSyncServer = (message: SyncMessage) => {
+  if (!syncClient.isConnected()) {
+    return;
+  }
 
-  ipcMain.on(
-    IpcToMain.ChangeConfiguration,
-    (event, key: ConfigurationKey, value: unknown) => {
-      console.log(`Changing configuration: ${key} => ${value}`);
-      settings.set(key, value);
-    }
+  syncClient.send(message);
+};
+
+const startUpdatingRoom = () => {
+  shouldTellSyncServerOnCsgoUpdate = true;
+};
+
+const stopUpdatingRooms = () => {
+  shouldTellSyncServerOnCsgoUpdate = false;
+};
+
+const sendSyncStatus = () => {
+  console.log('sure');
+  sendToMainWindow(
+    IpcToRenderer.SyncConnectionStatus,
+    syncClient.isConnected(),
+    syncClient.ip,
+    syncClient.port
   );
+};
 
-  ipcMain.on(IpcToMain.SyncServerSend, (event, message: SyncMessage) => {
-    syncClient.send(message);
-  });
+const createIpcListeners = () => {
+  ipcMain.on(IpcToMain.LaunchLocalSyncServer, launchLocalServerManager);
+  ipcMain.on(IpcToMain.StartLocalSyncServer, (_event, port: number) =>
+    localSyncServer.startServer(port)
+  );
+  ipcMain.on(IpcToMain.StopLocalSyncServer, () => localSyncServer.stopServer());
+  ipcMain.on(IpcToMain.ChangeConfiguration, changeConfiguration);
+  ipcMain.on(IpcToMain.SyncServerSend, (_, m) => sendToSyncServer(m));
+  ipcMain.on(IpcToMain.StartUpdatingRoom, startUpdatingRoom);
+  ipcMain.on(IpcToMain.StopUpdatingRooms, stopUpdatingRooms);
+  ipcMain.on(IpcToMain.SendSyncStatusPlease, sendSyncStatus);
 };
 
 const createSyncClientListeners = () => {
@@ -169,6 +195,9 @@ const createSyncClientListeners = () => {
       message
     );
   });
+
+  syncClient.on('connected', sendSyncStatus);
+  syncClient.on('disconnected', sendSyncStatus);
 };
 
 const connectToSyncServer = async () => {
@@ -176,22 +205,15 @@ const connectToSyncServer = async () => {
     return;
   }
 
-  const syncServerIp = await settings.get(ConfigurationKey.SYNC_SERVER_IP);
-  const syncServerPort = await settings.get(ConfigurationKey.SYNC_SERVER_PORT);
+  const syncServerIp = await settings.get(ConfigurationKey.SyncServerIP);
+  const syncServerPort = await settings.get(ConfigurationKey.SyncServerPort);
 
   console.log(`Trying to connect to ${syncServerIp}:${syncServerPort}`);
 
   try {
     await syncClient.connect(syncServerIp, syncServerPort);
-    sendToMainWindow(
-      IpcToRenderer.SyncConnectionStatus,
-      true,
-      syncServerIp,
-      syncServerPort
-    );
   } catch (e) {
     // timed out probably.
-    sendToMainWindow(IpcToRenderer.SyncConnectionStatus, false);
   }
 };
 
@@ -201,26 +223,36 @@ const connectToCSGO = async () => {
   }
 
   const csgoTelnetPort = await settings.get(
-    ConfigurationKey.LOCAL_CSGO_TELNET_PORT
+    ConfigurationKey.LocalCSGOTelnetPort
   );
 
   try {
     await csgoClient.connect(csgoTelnetPort);
     sendToMainWindow(IpcToRenderer.ConnectedToCSGO);
-    sendToMainWindow(IpcToRenderer.CSGOConnectionStatus, true);
   } catch (e) {
     // timed out probably.
-    sendToMainWindow(IpcToRenderer.CSGOConnectionStatus, false);
   }
 };
 
-const getCurrentlyPlayingDemo = async () => {
-  if (!csgoClient.isConnected()) {
-    return;
-  }
+const updateCsgoData = async () => {
+  const status = csgoClient.isConnected();
+  let demoStatus: DemoStatus = {
+    currentlyPlaying: false,
+  };
 
-  const result = await csgoClient.getDemoTickInfo();
-  sendToMainWindow(IpcToRenderer.CSGOConnectionStatus, true, result);
+  sendToMainWindow(IpcToRenderer.CSGOConnectionStatus, status, demoStatus);
+
+  // Should we send to sync server?
+  if (shouldTellSyncServerOnCsgoUpdate) {
+    if (status) {
+      demoStatus = await csgoClient.getDemoTickInfo();
+    }
+
+    sendToSyncServer({
+      msg: WebsocketMessageType.RoomDemoState,
+      demoStatus,
+    });
+  }
 };
 
 /**
@@ -242,7 +274,7 @@ const initializeConnections = () => {
 
   setInterval(connectToCSGO, 2000);
   setInterval(connectToSyncServer, 2000);
-  setInterval(getCurrentlyPlayingDemo, 1000);
+  setInterval(updateCsgoData, 150);
 };
 
 app

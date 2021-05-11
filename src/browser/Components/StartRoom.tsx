@@ -6,12 +6,13 @@ import { ipcRenderer } from 'electron';
 import {
   IpcToMain,
   IpcToRenderer,
-  WebsocketAction,
-  WebsocketResponse,
-} from '../Enums';
-import { SyncMessage } from '../SyncClient';
+  Urls,
+  WebsocketMessageType,
+} from '../../lib/Enums';
+import { SyncMessage } from '../../lib/SyncClient';
+import BackButton from './BackButton';
 
-const onRoomCreatedEventName = `${IpcToRenderer.SyncServerReceive}-${WebsocketResponse.ROOM_CREATED}`;
+const onRoomCreatedEventName = `${IpcToRenderer.SyncServerReceive}-${WebsocketMessageType.RoomCreated}`;
 
 const styles = () => ({
   root: {
@@ -41,23 +42,40 @@ class StartRoom extends React.Component {
 
   componentDidMount() {
     // Create a room.
-    ipcRenderer.once(onRoomCreatedEventName, this.onRoomCreated.bind(this));
-    ipcRenderer.send(IpcToMain.SyncServerSend, {
-      msg: WebsocketAction.CREATE_ROOM,
-    });
+    this.tryCreateRoom();
   }
 
   componentWillUnmount() {
+    const { roomId } = this.state;
+
     ipcRenderer.removeListener(
       onRoomCreatedEventName,
       this.onRoomCreated.bind(this)
     );
+
+    if (!roomId) {
+      return;
+    }
+
+    ipcRenderer.send(IpcToMain.StopUpdatingRooms);
+    ipcRenderer.send(IpcToMain.SyncServerSend, {
+      msg: WebsocketMessageType.DestroyRoom,
+      roomId,
+    });
   }
 
   onRoomCreated(event, message: SyncMessage) {
     const { roomId } = message;
+    ipcRenderer.send(IpcToMain.StartUpdatingRoom);
     this.setState({
       roomId,
+    });
+  }
+
+  tryCreateRoom() {
+    ipcRenderer.once(onRoomCreatedEventName, this.onRoomCreated.bind(this));
+    ipcRenderer.send(IpcToMain.SyncServerSend, {
+      msg: WebsocketMessageType.CreateRoom,
     });
   }
 
@@ -85,9 +103,12 @@ class StartRoom extends React.Component {
     );
 
     return (
-      <div className={classes.root}>
-        {!roomId ? waitingForRoom : roomCreated}
-      </div>
+      <>
+        <BackButton url={Urls.Home} />
+        <div className={classes.root}>
+          {!roomId ? waitingForRoom : roomCreated}
+        </div>
+      </>
     );
   }
 }

@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from 'react';
 import { Box, makeStyles } from '@material-ui/core';
 import { ipcRenderer } from 'electron';
-import { IpcToRenderer } from '../Enums';
-import { DemoStatus } from '../CSGOClient';
-import SyncConnectionContext, { SyncConnection } from './Contexts';
+import { IpcToRenderer } from '../../lib/Enums';
+import { DemoStatus } from '../../lib/CSGOClient';
+import SyncConnectionContext, { SyncConnection } from '../Contexts';
 
 const useStyles = makeStyles({
   statusBar: {
@@ -100,7 +100,7 @@ export default function StatusBar(props) {
 
   return (
     <Box className={classes.statusBar} display={display}>
-      {/* <CSGOStatus /> */}
+      <CSGOStatus />
       <SyncClientStatus />
     </Box>
   );

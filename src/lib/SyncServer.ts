@@ -1,7 +1,7 @@
 import WebSocket, { Server } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
-import { WebsocketAction, WebsocketResponse } from '../Enums';
+import { WebsocketMessageType } from './Enums';
 
 const createId = () => {
   const length = 5;
@@ -17,8 +17,12 @@ const createId = () => {
 };
 
 export interface SyncMessage {
-  msg: WebsocketAction | WebsocketResponse;
+  msg: WebsocketMessageType | WebsocketMessageType;
   [key: string]: unknown;
+}
+
+export interface DestroyRoomMessage extends SyncMessage {
+  roomId: string;
 }
 
 export interface CreateRoomResponse extends SyncMessage {
@@ -27,10 +31,10 @@ export interface CreateRoomResponse extends SyncMessage {
 
 export interface CurrentlyPlaying {
   currentlyPlaying: boolean;
-  currentTick: number | null;
-  totalTicks: number | null;
-  fileName: string | null;
-  totalPlaytimeMinutes: number | null;
+  currentTick?: number;
+  totalTicks?: number;
+  fileName?: string;
+  totalPlaytimeMinutes?: number;
 }
 
 export interface Room {
@@ -67,7 +71,7 @@ export default class SyncServer extends EventEmitter {
         this.emit('disconnected', connectionId)
       );
       this.connections[connectionId].send(
-        JSON.stringify({ msg: WebsocketResponse.READY })
+        JSON.stringify({ msg: WebsocketMessageType.Ready })
       );
       this.emit('connected', connectionId, req);
     });
@@ -80,6 +84,7 @@ export default class SyncServer extends EventEmitter {
 
   stopServer() {
     this.server?.close();
+    this.emit('closed');
   }
 
   send(connectionId: string, message: SyncMessage) {
@@ -94,7 +99,8 @@ export default class SyncServer extends EventEmitter {
   }
 
   setupMessageHandlers() {
-    this.on(`message-${WebsocketAction.CREATE_ROOM}`, this.onCreateRoom);
+    this.on(`message-${WebsocketMessageType.CreateRoom}`, this.onCreateRoom);
+    this.on(`message-${WebsocketMessageType.DestroyRoom}`, this.onDestroyRoom);
   }
 
   onCreateRoom(connectionId: string) {
@@ -115,13 +121,32 @@ export default class SyncServer extends EventEmitter {
       },
     };
 
-    console.log(`Created room: ${roomId}`);
-
     const response: CreateRoomResponse = {
-      msg: WebsocketResponse.ROOM_CREATED,
+      msg: WebsocketMessageType.RoomCreated,
       roomId,
     };
 
     this.send(connectionId, response);
+  }
+
+  onDestroyRoom(_connectionId: string, message: DestroyRoomMessage) {
+    if (!message.roomId) {
+      return;
+    }
+
+    const { roomId } = message;
+    const room: Room = this.rooms[roomId];
+
+    if (room.members.length > 0) {
+      // Tell everyone that the room is destroyed.
+      room.members.forEach((memberId) => {
+        this.send(memberId, {
+          msg: WebsocketMessageType.RoomDestroyed,
+          roomId,
+        });
+      });
+    }
+
+    delete this.rooms[roomId];
   }
 }

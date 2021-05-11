@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button, withStyles } from '@material-ui/core';
 import { ipcRenderer } from 'electron';
-import { IpcToMain, IpcToRenderer, ServerStatus } from '../Enums';
+import { IpcToMain, IpcToRenderer, ServerStatus } from '../../lib/Enums';
 
 const styles = () => ({
   root: {

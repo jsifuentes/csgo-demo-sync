@@ -3,18 +3,17 @@ import React, { useEffect, useState } from 'react';
 import { Box, makeStyles } from '@material-ui/core';
 import { HashRouter as Router, Switch, Route } from 'react-router-dom';
 import { ipcRenderer } from 'electron';
-import JoinRoom from './JoinRoom';
-import StartRoom from './StartRoom';
-import LocalServerManager from './LocalServerManager';
-import Home from './Home';
-import StatusBar from './StatusBar';
+import JoinRoom from './Components/JoinRoom';
+import StartRoom from './Components/StartRoom';
+import LocalServerManager from './Components/LocalServerManager';
+import Home from './Components/Home';
+import StatusBar from './Components/StatusBar';
 import SyncConnectionContext, { SyncConnection } from './Contexts';
-import { IpcToRenderer } from '../Enums';
+import { IpcToMain, IpcToRenderer, Urls } from '../lib/Enums';
 
 const useStyles = makeStyles({
   wrapper: {
-    textAlign: 'center',
-    padding: 16,
+    padding: 8,
   },
 });
 
@@ -22,7 +21,7 @@ export default function App() {
   const classes = useStyles();
   const [statusBarVisible, setStatusBarVisible] = useState(true);
   const syncConnectionState = useState(false);
-  const [, setSyncConnection] = syncConnectionState;
+  const [syncConnection, setSyncConnection] = syncConnectionState;
 
   const ContextedComponent = (props) => {
     const { Component } = props;
@@ -46,7 +45,9 @@ export default function App() {
         port,
       };
 
-      setSyncConnection(sc);
+      if (JSON.stringify(syncConnection) !== JSON.stringify(sc)) {
+        setSyncConnection(sc);
+      }
     };
 
     ipcRenderer.on(IpcToRenderer.SyncConnectionStatus, onReceivedStatusUpdate);
@@ -57,7 +58,10 @@ export default function App() {
         onReceivedStatusUpdate
       );
     };
-  }, []);
+  }, [syncConnection]);
+
+  // Ask dad for the sync status
+  ipcRenderer.send(IpcToMain.SendSyncStatusPlease);
 
   return (
     <>
@@ -70,30 +74,16 @@ export default function App() {
           <Switch>
             <Route
               exact
-              path="/"
+              path={Urls.Home}
               component={() => <ContextedComponent Component={<Home />} />}
             />
+            <Route exact path={Urls.CreateRoom} component={StartRoom} />
+            <Route exact path={Urls.JoinRoom} component={JoinRoom} />
             <Route
               exact
-              path="/start"
-              component={() => <ContextedComponent Component={<StartRoom />} />}
-            />
-            <Route
-              exact
-              path="/join"
-              component={() => <ContextedComponent Component={<JoinRoom />} />}
-            />
-            <Route
-              exact
-              path="/local-server"
+              path={Urls.LocalServerManager}
               component={() => (
-                <ContextedComponent
-                  Component={
-                    <LocalServerManager
-                      setStatusBarVisible={setStatusBarVisible}
-                    />
-                  }
-                />
+                <LocalServerManager setStatusBarVisible={setStatusBarVisible} />
               )}
             />
           </Switch>
