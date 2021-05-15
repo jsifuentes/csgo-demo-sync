@@ -16,9 +16,18 @@ const createId = () => {
   return result;
 };
 
+interface Connection {
+  websocket: WebSocket;
+  currentRoom?: string | null;
+}
+
 export interface SyncMessage {
   msg: WebsocketMessageType | WebsocketMessageType;
   [key: string]: unknown;
+}
+
+export interface JoinRoomMessage extends SyncMessage {
+  roomId: string;
 }
 
 export interface DestroyRoomMessage extends SyncMessage {
@@ -38,22 +47,28 @@ export interface CurrentlyPlaying {
 }
 
 export interface Room {
+  creator: string;
   members: string[];
   currentlyPlaying: CurrentlyPlaying;
 }
 
 export default class SyncServer extends EventEmitter {
-  server: Server | null;
+  server: Server | null = null;
 
-  connections: Record<string, WebSocket>;
+  connections: Record<string, Connection> = {};
 
-  rooms: Record<string, Room>;
+  rooms: Record<string, Room> = {
+    ABCDEF: {
+      creator: 'doesnt matter',
+      members: [],
+      currentlyPlaying: {
+        currentlyPlaying: false,
+      },
+    },
+  };
 
   constructor() {
     super();
-    this.server = null;
-    this.connections = {};
-    this.rooms = {};
     this.emit('ready');
   }
 
@@ -63,16 +78,18 @@ export default class SyncServer extends EventEmitter {
 
     this.server.on('connection', (ws, req) => {
       const connectionId = uuidv4();
-      this.connections[connectionId] = ws;
-      this.connections[connectionId].on('message', (message: string) =>
+      const connection: Connection = {
+        websocket: ws,
+        currentRoom: null,
+      };
+
+      ws.on('message', (message: string) =>
         this.handleMessage(connectionId, message)
       );
-      this.connections[connectionId].on('close', () =>
-        this.emit('disconnected', connectionId)
-      );
-      this.connections[connectionId].send(
-        JSON.stringify({ msg: WebsocketMessageType.Ready })
-      );
+      ws.on('close', () => this.emit('disconnected', connectionId));
+      ws.send(JSON.stringify({ msg: WebsocketMessageType.Ready }));
+
+      this.connections[connectionId] = connection;
       this.emit('connected', connectionId, req);
     });
 
@@ -88,7 +105,13 @@ export default class SyncServer extends EventEmitter {
   }
 
   send(connectionId: string, message: SyncMessage) {
-    this.connections[connectionId].send(JSON.stringify(message));
+    const connection = this.connections[connectionId];
+
+    if (!connection) {
+      return;
+    }
+
+    connection.websocket.send(JSON.stringify(message));
     this.emit('sent', connectionId, message);
   }
 
@@ -101,6 +124,8 @@ export default class SyncServer extends EventEmitter {
   setupMessageHandlers() {
     this.on(`message-${WebsocketMessageType.CreateRoom}`, this.onCreateRoom);
     this.on(`message-${WebsocketMessageType.DestroyRoom}`, this.onDestroyRoom);
+    this.on(`message-${WebsocketMessageType.JoinRoom}`, this.onJoinRoom);
+    // this.on(`message-${WebsocketMessageType.SetRoomDemo}`, this.onSetRoomDemo);
   }
 
   onCreateRoom(connectionId: string) {
@@ -116,6 +141,7 @@ export default class SyncServer extends EventEmitter {
 
     this.rooms[roomId] = {
       members: [connectionId],
+      creator: connectionId,
       currentlyPlaying: {
         currentlyPlaying: false,
       },
@@ -129,24 +155,106 @@ export default class SyncServer extends EventEmitter {
     this.send(connectionId, response);
   }
 
-  onDestroyRoom(_connectionId: string, message: DestroyRoomMessage) {
+  onJoinRoom(connectionId: string, message: JoinRoomMessage) {
     if (!message.roomId) {
       return;
     }
 
-    const { roomId } = message;
+    const { roomId }: { roomId?: string } = message;
     const room: Room = this.rooms[roomId];
 
-    if (room.members.length > 0) {
-      // Tell everyone that the room is destroyed.
-      room.members.forEach((memberId) => {
-        this.send(memberId, {
-          msg: WebsocketMessageType.RoomDestroyed,
-          roomId,
-        });
+    if (!room) {
+      this.send(connectionId, {
+        msg: WebsocketMessageType.RoomFailedToJoin,
+        error: 'Room does not exist.',
       });
+      return;
     }
 
+    if (room.creator !== connectionId) {
+      this.leaveRoom(connectionId);
+      room.members.push(connectionId);
+      this.connections[connectionId].currentRoom = roomId;
+
+      this.send(connectionId, {
+        msg: WebsocketMessageType.RoomJoined,
+        roomId,
+      });
+    }
+  }
+
+  onDestroyRoom(connectionId: string, message: DestroyRoomMessage) {
+    if (!message.roomId) {
+      return;
+    }
+
+    const { roomId }: { roomId?: string } = message;
+    const room: Room = this.rooms[roomId];
+
+    if (!room || room.creator !== connectionId) {
+      return;
+    }
+
+    this.destroyRoom(roomId);
+  }
+
+  destroyRoom(roomId: string) {
+    this.messageRoom(roomId, {
+      msg: WebsocketMessageType.DestroyRoom,
+      roomId,
+    });
+
     delete this.rooms[roomId];
+  }
+
+  messageRoom(roomId: string, message: SyncMessage, includeCreator = false) {
+    const room = this.rooms[roomId];
+
+    if (!room) {
+      return;
+    }
+
+    const sendTo = this.rooms[roomId]?.members || [];
+
+    if (includeCreator) {
+      sendTo.push(room.creator);
+    }
+
+    sendTo.forEach((memberId) => {
+      this.send(memberId, message);
+    });
+  }
+
+  leaveRoom(connectionId: string) {
+    const connection = this.connections[connectionId];
+
+    if (!connection || !connection.currentRoom) {
+      return;
+    }
+
+    const { currentRoom } = connection;
+    const room = this.rooms[currentRoom];
+
+    if (!room) {
+      // weird.
+      connection.currentRoom = null;
+    } else if (room.creator === connectionId) {
+      // also weird.
+      this.destroyRoom(currentRoom);
+    } else {
+      const index = room.members.indexOf(connectionId);
+      const message: SyncMessage = {
+        msg: WebsocketMessageType.LeftRoom,
+        roomId: currentRoom,
+        connectionId,
+      };
+
+      if (index > -1) {
+        room.members.splice(index, 1);
+        this.messageRoom(currentRoom, message);
+      }
+
+      this.send(connectionId, message);
+    }
   }
 }

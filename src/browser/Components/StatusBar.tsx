@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { Box, makeStyles } from '@material-ui/core';
 import { ipcRenderer } from 'electron';
+import Check from '@material-ui/icons/Check';
+import Close from '@material-ui/icons/Close';
 import { IpcToRenderer } from '../../lib/Enums';
 import { DemoStatus } from '../../lib/CSGOClient';
 import SyncConnectionContext, { SyncConnection } from '../Contexts';
@@ -9,12 +11,14 @@ import SyncConnectionContext, { SyncConnection } from '../Contexts';
 const useStyles = makeStyles({
   statusBar: {
     background: '#dedede',
-    padding: 12,
+    padding: '0 8px',
     fontSize: 12,
     borderBottom: '1px solid #c5c5c5',
   },
   statusRow: {
     clear: 'both',
+    padding: '5px 0',
+    borderBottom: '1px solid #ccc',
     '&:after': {
       content: '""',
       clear: 'both',
@@ -27,8 +31,21 @@ const useStyles = makeStyles({
     fontWeight: 700,
   },
   statusValue: {
-    display: 'inline-block',
     float: 'right',
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+
+    '& svg': {
+      fontSize: '16px',
+      marginRight: 2,
+    },
+  },
+  bad: {
+    color: '#ff0000',
+  },
+  good: {
+    color: '#009800',
   },
 });
 
@@ -44,26 +61,30 @@ function StatusRow(props) {
   );
 }
 
+function Connected() {
+  const classes = useStyles();
+  return (
+    <>
+      <Check className={classes.good} /> Connected
+    </>
+  );
+}
+
+function Disconnected() {
+  const classes = useStyles();
+  return (
+    <>
+      <Close className={classes.bad} /> Disconnected
+    </>
+  );
+}
+
 function CSGOStatus() {
-  const defaultStatus = 'Not connected to CSGO';
-  const [csgoStatus, setCSGOStatus] = useState(defaultStatus);
+  const [csgoStatus, setCSGOStatus] = useState(<Disconnected />);
 
   useEffect(() => {
-    const onReceivedStatusUpdate = (
-      event,
-      status,
-      demoStatus: DemoStatus | undefined
-    ) => {
-      let phrase;
-
-      if (!status) {
-        phrase = defaultStatus;
-      } else if (demoStatus?.currentlyPlaying) {
-        phrase = `Currently playing ${demoStatus.fileName} (${demoStatus.currentTick} / ${demoStatus.totalTicks})`;
-      } else {
-        phrase = 'Waiting for a demo to start playing';
-      }
-
+    const onReceivedStatusUpdate = (event, status) => {
+      const phrase = !status ? <Disconnected /> : <Connected />;
       setCSGOStatus(phrase);
     };
 
@@ -84,11 +105,10 @@ function SyncClientStatus() {
   return (
     <SyncConnectionContext.Consumer>
       {([syncConnection]: [SyncConnection]) => {
-        const value = syncConnection.connected
-          ? `Connected to ${syncConnection.ip}:${syncConnection.port}`
-          : `Disconnected`;
+        const status = syncConnection.connected;
+        const phrase = !status ? <Disconnected /> : <Connected />;
 
-        return <StatusRow statusLabel="Sync Server" statusValue={value} />;
+        return <StatusRow statusLabel="Sync Server" statusValue={phrase} />;
       }}
     </SyncConnectionContext.Consumer>
   );

@@ -47,6 +47,8 @@ class LocalServerManager extends React.Component {
       logs: [],
       serverStatus: ServerStatus.Stopped,
     };
+
+    this.onServerLogMessageBinded = this.onServerLogMessage.bind(this);
   }
 
   componentDidMount() {
@@ -58,7 +60,7 @@ class LocalServerManager extends React.Component {
 
     ipcRenderer.on(
       IpcToRenderer.ServerLogMessage,
-      this.onServerLogMessage.bind(this)
+      this.onServerLogMessageBinded
     );
   }
 
@@ -67,10 +69,11 @@ class LocalServerManager extends React.Component {
   }
 
   componentWillUnmount() {
+    console.log('unmounted');
     this.isActuallyMounted = false;
     ipcRenderer.removeListener(
       IpcToRenderer.ServerLogMessage,
-      this.onServerLogMessage.bind(this)
+      this.onServerLogMessageBinded
     );
   }
 
@@ -88,6 +91,7 @@ class LocalServerManager extends React.Component {
       console.log('called while unmounted?');
       return;
     }
+
     const { logs } = this.state;
     const updateArray = [...logs];
     updateArray.push(log);

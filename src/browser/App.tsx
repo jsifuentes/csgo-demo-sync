@@ -3,10 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { Box, makeStyles } from '@material-ui/core';
 import { HashRouter as Router, Switch, Route } from 'react-router-dom';
 import { ipcRenderer } from 'electron';
-import JoinRoom from './Components/JoinRoom';
-import StartRoom from './Components/StartRoom';
-import LocalServerManager from './Components/LocalServerManager';
-import Home from './Components/Home';
+import JoinRoom from './Pages/JoinRoom';
+import StartRoom from './Pages/StartRoom';
+import ServerManager from './Pages/ServerManager';
+import Home from './Pages/Home';
 import StatusBar from './Components/StatusBar';
 import SyncConnectionContext, { SyncConnection } from './Contexts';
 import { IpcToMain, IpcToRenderer, Urls } from '../lib/Enums';
@@ -52,16 +52,16 @@ export default function App() {
 
     ipcRenderer.on(IpcToRenderer.SyncConnectionStatus, onReceivedStatusUpdate);
 
+    // Ask dad for the sync status
+    ipcRenderer.send(IpcToMain.SendSyncStatusPlease);
+
     return () => {
       ipcRenderer.removeListener(
         IpcToRenderer.SyncConnectionStatus,
         onReceivedStatusUpdate
       );
     };
-  }, [syncConnection]);
-
-  // Ask dad for the sync status
-  ipcRenderer.send(IpcToMain.SendSyncStatusPlease);
+  }, [setSyncConnection, syncConnection]);
 
   return (
     <>
@@ -81,9 +81,9 @@ export default function App() {
             <Route exact path={Urls.JoinRoom} component={JoinRoom} />
             <Route
               exact
-              path={Urls.LocalServerManager}
+              path={Urls.ServerManager}
               component={() => (
-                <LocalServerManager setStatusBarVisible={setStatusBarVisible} />
+                <ServerManager setStatusBarVisible={setStatusBarVisible} />
               )}
             />
           </Switch>

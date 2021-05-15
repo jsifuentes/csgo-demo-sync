@@ -10,7 +10,9 @@ import {
   WebsocketMessageType,
 } from '../../lib/Enums';
 import { SyncMessage } from '../../lib/SyncClient';
-import BackButton from './BackButton';
+import BackButton from '../Components/BackButton';
+import RoomCreated from '../Components/RoomCreated';
+import RoomCreating from '../Components/RoomCreating';
 
 const onRoomCreatedEventName = `${IpcToRenderer.SyncServerReceive}-${WebsocketMessageType.RoomCreated}`;
 
@@ -38,6 +40,7 @@ class StartRoom extends React.Component {
     this.state = {
       roomId: null,
     };
+    this.onRoomCreatedBinded = this.onRoomCreated.bind(this);
   }
 
   componentDidMount() {
@@ -50,7 +53,7 @@ class StartRoom extends React.Component {
 
     ipcRenderer.removeListener(
       onRoomCreatedEventName,
-      this.onRoomCreated.bind(this)
+      this.onRoomCreatedBinded
     );
 
     if (!roomId) {
@@ -73,7 +76,7 @@ class StartRoom extends React.Component {
   }
 
   tryCreateRoom() {
-    ipcRenderer.once(onRoomCreatedEventName, this.onRoomCreated.bind(this));
+    ipcRenderer.once(onRoomCreatedEventName, this.onRoomCreatedBinded);
     ipcRenderer.send(IpcToMain.SyncServerSend, {
       msg: WebsocketMessageType.CreateRoom,
     });
@@ -83,30 +86,13 @@ class StartRoom extends React.Component {
     const { classes } = this.props;
     const { roomId } = this.state;
 
-    const waitingForRoom = (
-      <Box className={classes.waitingForRoom}>
-        <span>Please wait while the room is created...</span>
-      </Box>
-    );
-
-    const roomCreated = (
-      <Box className={classes.roomCreated}>
-        <div className={classes.roomHeader}>
-          <div className={classes.roomId}>{roomId}</div>
-          <div className={classes.roomIdSubtext}>
-            This is your Room ID
-            <br />
-            Share this with your friends so they can join
-          </div>
-        </div>
-      </Box>
-    );
-
     return (
       <>
-        <BackButton url={Urls.Home} />
+        <Box>
+          <BackButton url={Urls.Home} />
+        </Box>
         <div className={classes.root}>
-          {!roomId ? waitingForRoom : roomCreated}
+          {!roomId ? <RoomCreating /> : <RoomCreated roomId={roomId} />}
         </div>
       </>
     );

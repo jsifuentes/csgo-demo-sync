@@ -72,7 +72,7 @@ const createMainWindow = () => {
 };
 
 const sendToMainWindow = (type, ...args) =>
-  windows.getWindow(WindowTypes.Main)?.webContents.send(type, ...args);
+  windows.getWindow(WindowTypes.Main).webContents.send(type, ...args);
 
 const sendToLocalSyncServerManagerWindow = (
   type = IpcToRenderer.ServerLogMessage,
@@ -166,7 +166,6 @@ const stopUpdatingRooms = () => {
 };
 
 const sendSyncStatus = () => {
-  console.log('sure');
   sendToMainWindow(
     IpcToRenderer.SyncConnectionStatus,
     syncClient.isConnected(),
@@ -185,7 +184,9 @@ const createIpcListeners = () => {
   ipcMain.on(IpcToMain.SyncServerSend, (_, m) => sendToSyncServer(m));
   ipcMain.on(IpcToMain.StartUpdatingRoom, startUpdatingRoom);
   ipcMain.on(IpcToMain.StopUpdatingRooms, stopUpdatingRooms);
-  ipcMain.on(IpcToMain.SendSyncStatusPlease, sendSyncStatus);
+  ipcMain.on(IpcToMain.SendSyncStatusPlease, () => {
+    sendSyncStatus();
+  });
 };
 
 const createSyncClientListeners = () => {
@@ -240,7 +241,7 @@ const updateCsgoData = async () => {
     currentlyPlaying: false,
   };
 
-  sendToMainWindow(IpcToRenderer.CSGOConnectionStatus, status, demoStatus);
+  sendToMainWindow(IpcToRenderer.CSGOConnectionStatus, status);
 
   // Should we send to sync server?
   if (shouldTellSyncServerOnCsgoUpdate) {

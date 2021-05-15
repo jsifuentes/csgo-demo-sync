@@ -1,10 +1,10 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Button, makeStyles } from '@material-ui/core';
 import { Link } from 'react-router-dom';
 import { ipcRenderer } from 'electron';
 import SyncConnectionContext, { SyncConnection } from '../Contexts';
 import { ConfigurationKey, IpcToMain, Urls } from '../../lib/Enums';
-import Title from './Title';
+import Title from '../Components/Title';
 
 const useStyles = makeStyles({
   root: {
@@ -16,11 +16,6 @@ const useStyles = makeStyles({
     height: 48,
     padding: '0 30px',
     marginBottom: 16,
-    background: '#5d79ae',
-
-    '&:hover': {
-      background: '#334b77',
-    },
   },
   statusbar: {
     background: '#dedede',
@@ -71,7 +66,7 @@ export default function Home() {
                 to={Urls.CreateRoom}
                 disabled={!syncConnectionStatus.connected}
               >
-                Start a New Session
+                Start a New Room
               </Button>
             </div>
             <div>
@@ -83,7 +78,7 @@ export default function Home() {
                 to={Urls.JoinRoom}
                 disabled={!syncConnectionStatus.connected}
               >
-                Join a Session
+                Join a Room
               </Button>
             </div>
 

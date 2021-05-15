@@ -1,6 +1,5 @@
-import WebSocket, { Server } from 'ws';
+import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { WebsocketMessageType } from './Enums';
 import { SyncMessage } from './SyncServer';
 
 export default class SyncClient extends EventEmitter {
@@ -61,7 +60,7 @@ export default class SyncClient extends EventEmitter {
   onMessage(event: MessageEvent) {
     const req = JSON.parse(event.data);
 
-    if (req.action) {
+    if (req.msg) {
       this.emit(`msg-${req.msg}`, req);
     }
 

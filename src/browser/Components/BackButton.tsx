@@ -1,12 +1,13 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
-import { Box, Button, makeStyles } from '@material-ui/core';
+import { Button, makeStyles } from '@material-ui/core';
 import KeyboardBackspaceIcon from '@material-ui/icons/KeyboardBackspace';
 import { Link } from 'react-router-dom';
 
 const useStyles = makeStyles({
   backButton: {
     minWidth: 36,
+    float: 'left',
   },
 });
 
@@ -15,16 +16,14 @@ const BackButton = (props) => {
   const { url, onClick } = props;
 
   return (
-    <Box>
-      <Button
-        className={classes.backButton}
-        component={Link}
-        to={url}
-        onClick={onClick}
-      >
-        <KeyboardBackspaceIcon />
-      </Button>
-    </Box>
+    <Button
+      className={classes.backButton}
+      component={Link}
+      to={url}
+      onClick={onClick}
+    >
+      <KeyboardBackspaceIcon />
+    </Button>
   );
 };
 

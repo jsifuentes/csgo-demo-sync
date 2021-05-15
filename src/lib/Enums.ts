@@ -20,12 +20,17 @@ export enum WebsocketMessageType {
   // Client => Server
   CreateRoom = 'create_room',
   DestroyRoom = 'destroy_room',
+  JoinRoom = 'join_room',
+  SetRoomDemo = 'set_room_demo',
 
   // Server => Client
   Ready = 'ready',
   RoomCreated = 'room_created',
   RoomDestroyed = 'room_destroyed',
   RoomDemoState = 'room_demo_state',
+  LeftRoom = 'left_room',
+  RoomJoined = 'room_joined',
+  RoomFailedToJoin = 'room_failed_to_join',
 }
 
 export enum ServerStatus {
